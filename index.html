@@ -304,7 +304,18 @@ function resetGame(){
  document.getElementById('level').textContent='1';
 }
 
-document.getElementById('start').addEventListener('click',()=>{
+document.getElementById('start').onclick = function() {
+try {
+resetGame();
+running = true;
+gameOver = false;
+document.getElementById('screen').style.display = 'none';
+} catch (error) {
+document.getElementById('description').textContent =
+'Error: ' + error.message;
+document.getElementById('screen').style.display = 'flex';
+}
+};
  resetGame();
  running=true;
  gameOver=false;
