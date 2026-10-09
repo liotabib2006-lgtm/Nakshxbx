@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SLOPE EXTREME 3D</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#050505;font-family:Arial,sans-serif;color:white;touch-action:none}
+canvas{display:block}
+#hud{position:fixed;top:14px;left:14px;z-index:3;font-size:16px;line-height:1.8;font-weight:bold;text-shadow:0 0 10px #00ff44;pointer-events:none}
+#logo{position:fixed;top:15px;right:15px;color:#00ff44;font-size:20px;font-weight:900;letter-spacing:2px;text-shadow:0 0 12px #00ff44;z-index:3}
+#screen{position:fixed;inset:0;background:#030503eF;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+h1{font-size:clamp(36px,9vw,66px);color:#00ff44;text-shadow:0 0 25px #00ff44;margin:0 0 12px}
+p{line-height:1.6;max-width:440px}
+small{line-height:1.9;color:#ccc}
+button{color:white;background:#101b12;border:2px solid #00ff44;border-radius:9px;font-weight:bold;font-size:16px;padding:12px;touch-action:none}
+#start{font-size:20px;padding:15px 32px;margin-top:20px}
+#controls{position:fixed;bottom:16px;left:12px;right:12px;z-index:5;display:flex;justify-content:space-between;align-items:end;pointer-events:none}
+.pad{display:grid;grid-template-columns:56px 56px 56px;grid-template-rows:49px 49px;gap:5px}
+.pad button,#jump{pointer-events:auto;background:#101b12dd}
+#up{grid-column:2;grid-row:1}
+#left{grid-column:1;grid-row:2}
+#down{grid-column:2;grid-row:2}
+#right{grid-column:3;grid-row:2}
+#jump{min-width:78px;height:54px}
+@media(min-width:800px){#controls{opacity:.65}}
+</style>
+</head>
+<body>
+
+<div id="hud">
+<div>SCORE: <span id="score">0</span></div>
+<div>BEST: <span id="best">0</span></div>
+<div>SPEED: <span id="speed">1.0</span>x</div>
+<div>LEVEL: <span id="level">1</span></div>
+</div>
+<div id="logo">SLOPE EXTREME</div>
+
+<div id="screen">
+<h1 id="heading">SLOPE EXTREME</h1>
+<p id="description">Roll down the endless slope. Dodge obstacles. Survive as long as possible.</p>
+<small>ARROW KEYS / WASD TO MOVE<br>SPACE TO JUMP<br>ON MOBILE: USE THE SCREEN CONTROLS</small>
+<button id="start">START GAME</button>
+</div>
+
+<div id="controls">
+<div class="pad">
+<button id="up">UP</button>
+<button id="left">LEFT</button>
+<button id="down">DOWN</button>
+<button id="right">RIGHT</button>
+</div>
+<button id="jump">JUMP</button>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030503);
+scene.fog = new THREE.Fog(0x030503, 30, 125);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.1, 300);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x9ab5ff,0x101010,1.8));
+
+const sun = new THREE.DirectionalLight(0xffffff,2);
+sun.position.set(-5,12,5);
+scene.add(sun);
+
+const glow = new THREE.PointLight(0x00ff44,4,15);
+scene.add(glow);
+
+const slope = 0.14;
+const roadWidth = 9;
+const segmentLength = 18;
+const segmentCount = 14;
+
+function roadY(z){return slope*z}
+
+const roadMat = new THREE.MeshStandardMaterial({
+ color:0x292929,roughness:0.85
+});
+const greenMat = new THREE.MeshBasicMaterial({color:0x00ff44});
+const redMat = new THREE.MeshStandardMaterial({
+ color:0xff1010,emissive:0x990000,emissiveIntensity:1.6
+});
+
+const segments=[];
+
+for(let i=0;i<segmentCount;i++){
+ const group=new THREE.Group();
+
+ const floor=new THREE.Mesh(
+  new THREE.BoxGeometry(roadWidth,0.3,segmentLength),
+  roadMat
+ );
+ floor.position.y=-0.15;
+ group.add(floor);
+
+ for(const side of [-1,1]){
+  const edge=new THREE.Mesh(
+   new THREE.BoxGeometry(0.13,0.12,segmentLength),
+   greenMat
+  );
+  edge.position.set(side*roadWidth/2,0.03,0);
+  group.add(edge);
+ }
+
+ for(const x of [-2.8,0,2.8]){
+  const line=new THREE.Mesh(
+   new THREE.BoxGeometry(0.035,0.015,segmentLength),
+   new THREE.MeshBasicMaterial({color:0x151d15})
+  );
+  line.position.set(x,0.01,0);
+  group.add(line);
+ }
+
+ const z=-i*segmentLength;
+ group.position.set(0,roadY(z),z);
+ group.rotation.x=-Math.atan(slope);
+ scene.add(group);
+ segments.push(group);
+}
+
+const ball=new THREE.Mesh(
+ new THREE.SphereGeometry(0.46,32,32),
+ new THREE.MeshStandardMaterial({
+  color:0x39ff50,
+  emissive:0x00ff22,
+  emissiveIntensity:1.8,
+  metalness:0.25,
+  roughness:0.2
+ })
+);
+scene.add(ball);
+
+const ring=new THREE.Mesh(
+ new THREE.TorusGeometry(0.47,0.022,8,36),
+ greenMat
+);
+ring.rotation.x=Math.PI/2;
+ball.add(ring);
+
+const obstacleGeometry=new THREE.BoxGeometry(1.3,1.25,1.25);
+const obstacles=[];
+const gaps=[];
+let nextSpawnZ=-15;
+
+function lanePosition(){
+ return (Math.floor(Math.random()*5)-2)*1.55;
+}
+
+function addObstacle(z,x){
+ const mesh=new THREE.Mesh(obstacleGeometry,redMat);
+ mesh.position.set(x,roadY(z)+0.65,z);
+ mesh.rotation.y=Math.random()*0.7;
+ scene.add(mesh);
+ obstacles.push(mesh);
+}
+
+function spawnPattern(){
+ const z=nextSpawnZ;
+ const difficulty=Math.min(score/250,1);
+
+ const count=Math.random() < 0.35+difficulty*0.35 ? 2 : 1;
+ const blocked=[];
+
+ while(blocked.length<count){
+  const lane=Math.floor(Math.random()*5)-2;
+  if(!blocked.includes(lane))blocked.push(lane);
+ }
+
+ for(const lane of blocked){
+  addObstacle(z,lane*1.55);
+ }
+
+ if(score>180 && Math.random()<0.23){
+  const z2=z-5;
+  const lane=Math.floor(Math.random()*5)-2;
+  addObstacle(z2,lane*1.55);
+ }
+
+ nextSpawnZ-=Math.max(7,12-score*0.008)+Math.random()*3;
+}
+
+for(let i=0;i<13;i++)spawnPattern();
+
+const starGeometry=new THREE.BufferGeometry();
+const starPositions=[];
+
+for(let i=0;i<500;i++){
+ starPositions.push(
+  (Math.random()-0.5)*130,
+  Math.random()*65-5,
+  -Math.random()*220
+ );
+}
+
+starGeometry.setAttribute(
+ 'position',
+ new THREE.Float32BufferAttribute(starPositions,3)
+);
+
+scene.add(new THREE.Points(
+ starGeometry,
+ new THREE.PointsMaterial({color:0x777777,size:0.13})
+));
+
+const keys={};
+let running=false;
+let x=0;
+let ballHeight=0;
+let jumpVelocity=0;
+let speed=20;
+let score=0;
+let best=0;
+let elapsed=0;
+let gameOver=false;
+
+function jump(){
+ if(running && ballHeight<=0.01){
+  jumpVelocity=9.5;
+ }
+}
+
+window.addEventListener('keydown',e=>{
+ const k=e.key.toLowerCase();
+ keys[k]=true;
+ if(['arrowleft','arrowright','arrowup','arrowdown',' '].includes(k))e.preventDefault();
+ if(k===' ')jump();
+});
+
+window.addEventListener('keyup',e=>{
+ keys[e.key.toLowerCase()]=false;
+});
+
+function bindButton(id,key){
+ const b=document.getElementById(id);
+ b.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  keys[key]=true;
+  b.setPointerCapture(e.pointerId);
+ });
+ for(const ev of ['pointerup','pointercancel','lostpointercapture']){
+  b.addEventListener(ev,()=>keys[key]=false);
+ }
+}
+
+bindButton('left','arrowleft');
+bindButton('right','arrowright');
+bindButton('up','arrowup');
+bindButton('down','arrowdown');
+
+document.getElementById('jump').addEventListener('pointerdown',e=>{
+ e.preventDefault();
+ jump();
+});
+
+function endGame(){
+ if(!running)return;
+ running=false;
+ gameOver=true;
+ best=Math.max(best,Math.floor(score));
+ document.getElementById('best').textContent=best;
+ document.getElementById('heading').textContent='GAME OVER';
+ document.getElementById('description').textContent=
+  'Score: '+Math.floor(score)+' | Best: '+best;
+ document.getElementById('start').textContent='TRY AGAIN';
+ document.getElementById('screen').style.display='flex';
+}
+
+function resetGame(){
+ x=0;
+ ballHeight=0;
+ jumpVelocity=0;
+ speed=20;
+ score=0;
+ elapsed=0;
+ nextSpawnZ=-15;
+
+ for(const o of obstacles)scene.remove(o);
+ obstacles.length=0;
+
+ for(let i=0;i<13;i++)spawnPattern();
+
+ segments.forEach((g,i)=>{
+  const z=-i*segmentLength;
+  g.position.set(0,roadY(z),z);
+ });
+
+ ball.position.set(0,roadY(0)+0.46,0);
+ ball.rotation.set(0,0,0);
+
+ document.getElementById('score').textContent='0';
+ document.getElementById('speed').textContent='1.0';
+ document.getElementById('level').textContent='1';
+}
+
+document.getElementById('start').addEventListener('click',()=>{
+ resetGame();
+ running=true;
+ gameOver=false;
+ document.getElementById('screen').style.display='none';
+});
+
+const clock=new THREE.Clock();
+
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),0.03);
+
+ if(running){
+  elapsed+=dt;
+
+  speed=Math.min(20+elapsed*1.15,52);
+  const move=speed*dt;
+
+  score+=move;
+  x+=(keys.arrowright||keys.d?1:0)*10*dt;
+  x-=(keys.arrowleft||keys.a?1:0)*10*dt;
+
+  if(keys.arrowup||keys.w)x-=0;
+  if(keys.arrowdown||keys.s)x+=0;
+
+  x=THREE.MathUtils.clamp(x,-6,6);
+
+  jumpVelocity-=23*dt;
+  ballHeight+=jumpVelocity*dt;
+
+  if(ballHeight<=0){
+   ballHeight=0;
+   jumpVelocity=0;
+  }
+
+  ball.position.set(x,roadY(0)+0.46+ballHeight,0);
+  ball.rotation.x-=move/0.46;
+  ball.rotation.z-=x*dt*0.4;
+
+  glow.position.copy(ball.position);
+  glow.position.y+=1.2;
+
+  for(const g of segments){
+   g.position.z+=move;
+   if(g.position.z>segmentLength){
+    g.position.z-=segmentCount*segmentLength;
+   }
+   g.position.y=roadY(g.position.z);
+  }
+
+  for(const o of obstacles){
+   o.position.z+=move;
+   o.position.y=roadY(o.position.z)+0.65;
+   o.rotation.y+=dt*0.25;
+
+   if(
+    Math.abs(o.position.z)<0.85 &&
+    Math.abs(o.position.x-x)<1.02 &&
+    ballHeight<1.25
+   ){
+    endGame();
+    break;
+   }
+
+   if(o.position.z>12){
+    scene.remove(o);
+    o.position.z=nextSpawnZ;
+    o.position.x=lanePosition();
+    o.position.y=roadY(o.position.z)+0.65;
+    nextSpawnZ-=Math.max(7,12-score*0.008)+Math.random()*3;
+    scene.add(o);
+   }
+  }
+
+  if(Math.abs(x)>4.65)endGame();
+
+  document.getElementById('score').textContent=Math.floor(score);
+  document.getElementById('speed').textContent=(speed/20).toFixed(1);
+  document.getElementById('level').textContent=1+Math.floor(score/200);
+ }
+
+ camera.position.x+=(x*0.38-camera.position.x)*0.07;
+ camera.position.y+=(4.5+ballHeight*0.25-camera.position.y)*0.07;
+ camera.position.z=8;
+ camera.lookAt(x*0.2,-3,-12);
+
+ renderer.render(scene,camera);
+}
+
+ball.position.set(0,0.46,0);
+animate();
+
+window.addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
